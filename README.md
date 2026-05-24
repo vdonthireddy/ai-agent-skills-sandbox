@@ -184,7 +184,7 @@ sequenceDiagram
     User->>Agent: Submit Query: "Run a full travel research report on Paris"
     
     rect rgb(20, 25, 45)
-        Note over Agent,SkillsReg,ToolsReg: 1. Capability Declaration Phase
+        Note over Agent,ToolsReg: 1. Capability Declaration Phase
         Agent->>ToolsReg: GET /api/tools
         ToolsReg-->>Agent: Returns Tool schemas (get_weather, calculator, etc.)
         Agent->>SkillsReg: GET /api/skills
