@@ -71,6 +71,26 @@ It is common to get confused by these terms because they are often used intercha
 6.  **The Agent returns the Observation**:
     The Agent packages the result into a tool response and feeds it back to the LLM, completing the turn.
 
+### Tools vs. Skills in the Broader Agent Ecosystem
+
+In many popular agent frameworks (such as CrewAI, AutoGen, or Semantic Kernel), you will see references to both **Tools** and **Skills**. Here is how to distinguish them:
+
+*   **Tools (Atomic Primitives)**: 
+    A Tool is a low-level, technical capability—usually a single function or API call. It takes raw inputs, performs a simple task, and returns raw data. The LLM must figure out how, when, and in what order to call them.
+    *   *Examples*: `get_weather(city)`, `calculator(expression)`, `write_file(path)`.
+*   **Skills (Composite Workflows)**: 
+    A Skill is a higher-level, goal-oriented capability. It represents a **complex behavior or workflow** that typically coordinates multiple tools, prompts, or reasoning patterns together to achieve a specific business objective.
+    *   *Examples*: `ResearchCompetitor(company_name)` (a skill that runs search queries, scrapes web pages, summarizes text, and compiles a report) or `GenerateMarketingCampaign(audience)` (a skill that drafts copy, edits for tone, compiles images, and posts them).
+
+#### Comparison Table
+
+| Dimension | Tool (Atomic) | Skill (Composite) |
+| :--- | :--- | :--- |
+| **Granularity** | Low-level function (single task). | High-level goal (multi-step workflow). |
+| **LLM Responsibility** | LLM must figure out how to sequence it. | Sequence is pre-defined or encapsulated in code. |
+| **Coordination** | Solves a single step. | Coordinates multiple tools/agents. |
+| **State & Prompts** | Minimal (just inputs/outputs). | Often includes custom instructions, templates, or prompt guidelines. |
+
 ---
 
 
