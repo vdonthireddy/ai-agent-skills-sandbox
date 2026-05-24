@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Python AI Agent Sandbox (No Frameworks)</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- Main Style -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="app-header">
+        <div class="header-logo">
+            <div class="logo-glow"></div>
+            <h1>Antigravity <span>Agent Sandbox</span></h1>
+        </div>
+        <div class="header-status">
+            <div class="status-pill">
+                <span class="status-dot green"></span>
+                <span id="active-skills-count">Loading Skills...</span>
+            </div>
+            <div class="mode-selector">
+                <label for="mode-toggle">Mode:</label>
+                <select id="mode-toggle" class="custom-select">
+                    <option value="simulated">Simulation Mode (Zero Setup)</option>
+                    <option value="live">Live Gemini API Mode (Real Calls)</option>
+                </select>
+            </div>
+            <div class="api-key-container" id="api-key-container" style="display: none;">
+                <input type="password" id="gemini-api-key" placeholder="Enter Gemini API Key..." class="custom-input">
+            </div>
+        </div>
+    </header>
+
+    <main class="app-layout">
+        <!-- LEFT COLUMN: Skills Manager -->
+        <aside class="panel left-panel" aria-label="Skills Management">
+            <section class="panel-section">
+                <div class="panel-header">
+                    <h2>Registered Python Skills</h2>
+                    <span class="badge">WebMCP Standard</span>
+                </div>
+                <p class="panel-desc">These functions are decorated with <code>@skill</code> on the backend. Their parameters and descriptions are auto-extracted into JSON Schema for the LLM.</p>
+                <div id="skills-list" class="skills-list">
+                    <!-- Loaded dynamically -->
+                    <div class="loading-spinner">Loading skills from Python registry...</div>
+                </div>
+            </section>
+
+            <section class="panel-section flex-grow">
+                <div class="panel-header">
+                    <h2>Register Custom Python Skill</h2>
+                </div>
+                <div class="code-editor-container">
+                    <div class="editor-header">
+                        <span>python_skill.py</span>
+                        <button id="btn-register-skill" class="btn btn-secondary btn-sm">Register Code</button>
+                    </div>
+                    <textarea id="custom-skill-code" class="code-editor" spellcheck="false">@skill
+def reverse_string(text: str) -> str:
+    """
+    Reverses the characters in the input text string.
+    
+    Args:
+        text: The string message to reverse.
+    """
+    return text[::-1]
+</textarea>
+                </div>
+                <div id="registration-status" class="alert-box" style="display: none;"></div>
+            </section>
+        </aside>
+
+        <!-- CENTER COLUMN: Visual Loop & Chat Sandbox -->
+        <section class="panel center-panel" aria-label="Agent Execution Sandbox">
+            <!-- 1. Visual Agent Loop Flowchart -->
+            <div class="visualizer-container">
+                <div class="panel-header">
+                    <h2>Agent Reasoning Loop</h2>
+                </div>
+                <div class="flowchart-svg-container">
+                    <svg viewBox="0 0 800 180" id="agent-flow-svg">
+                        <!-- Definitions for markers/glows -->
+                        <defs>
+                            <linearGradient id="active-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                <stop offset="0%" stop-color="#8b5cf6" />
+                                <stop offset="100%" stop-color="#ec4899" />
+                            </linearGradient>
+                            <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                                <feGaussianBlur stdDeviation="6" result="blur" />
+                                <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                            </filter>
+                        </defs>
+                        
+                        <!-- Connections (Lines) -->
+                        <path id="path-input-reason" d="M 120 90 L 260 90" class="flow-path" />
+                        <path id="path-reason-tool" d="M 320 90 Q 430 30 540 90" class="flow-path" />
+                        <path id="path-tool-reason" d="M 540 90 Q 430 150 320 90" class="flow-path" />
+                        <path id="path-reason-output" d="M 380 90 L 680 90" class="flow-path" />
+                        
+                        <!-- Flow Nodes -->
+                        <!-- Node 1: Input -->
+                        <g id="node-input" class="flow-node active-pulse">
+                            <rect x="20" y="60" width="100" height="60" rx="10" />
+                            <text x="70" y="96" class="node-title">1. User Query</text>
+                        </g>
+                        
+                        <!-- Node 2: Reasoner (LLM) -->
+                        <g id="node-reasoner" class="flow-node">
+                            <rect x="260" y="60" width="120" height="60" rx="10" />
+                            <text x="320" y="96" class="node-title">2. LLM Planner</text>
+                            <text x="320" y="112" class="node-sub">Thought</text>
+                        </g>
+                        
+                        <!-- Node 3: Skill Executor -->
+                        <g id="node-executor" class="flow-node">
+                            <rect x="540" y="60" width="120" height="60" rx="10" />
+                            <text x="600" y="96" class="node-title">3. Skill Executor</text>
+                            <text x="600" y="112" class="node-sub">Python Code</text>
+                        </g>
+                        
+                        <!-- Node 4: Output -->
+                        <g id="node-output" class="flow-node">
+                            <rect x="680" y="60" width="100" height="60" rx="10" />
+                            <text x="730" y="96" class="node-title">4. Answer</text>
+                        </g>
+                    </svg>
+                </div>
+                <div class="flowchart-legend">
+                    <span id="flow-state-label">State: Idle</span>
+                </div>
+            </div>
+
+            <!-- 2. Execution Terminal -->
+            <div class="terminal-container">
+                <div class="terminal-header">
+                    <div class="terminal-buttons">
+                        <span class="term-btn red"></span>
+                        <span class="term-btn yellow"></span>
+                        <span class="term-btn green"></span>
+                    </div>
+                    <span class="terminal-title">Agent Console & Logs</span>
+                    <button id="btn-clear-console" class="btn btn-dark btn-sm">Clear</button>
+                </div>
+                <div id="console-logs" class="console-logs">
+                    <div class="system-message">
+                        Console ready. Select a template query below or write your own.
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. Prompt & Templates Panel -->
+            <div class="controls-container">
+                <div class="templates-bar">
+                    <button class="template-chip" data-prompt="What is the weather in Tokyo and what is that temperature squared?">Weather + Calculation</button>
+                    <button class="template-chip" data-prompt="Find the weather in Sydney, save it to browser storage under 'syd_report', and double check it is saved.">Weather + DB Storage</button>
+                    <button class="template-chip" data-prompt="Solve (25 * 4) / (5 + 15) and print the result.">Math Equation</button>
+                </div>
+                
+                <div class="chat-input-row">
+                    <input type="text" id="user-prompt" placeholder="Ask the agent to solve something..." class="custom-input main-prompt-input">
+                    <button id="btn-run-agent" class="btn btn-primary">
+                        <span class="btn-text">Execute Agent Loop</span>
+                        <span class="spinner" style="display: none;"></span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- RIGHT COLUMN: Inspection & Learn Panel -->
+        <aside class="panel right-panel" aria-label="Technical Inspector">
+            <section class="panel-section">
+                <div class="tab-container">
+                    <div class="tab-headers">
+                        <button class="tab-btn active" data-tab="prompt-view">LLM Context</button>
+                        <button class="tab-btn" data-tab="json-view">Raw JSON Logs</button>
+                    </div>
+                    
+                    <div class="tab-contents">
+                        <!-- Tab 1: System Prompt & Schemas -->
+                        <div id="prompt-view" class="tab-pane active">
+                            <h3>Agent System Instruction</h3>
+                            <pre class="inspector-box pre-wrap" id="inspector-system-prompt">Loading...</pre>
+                            
+                            <h3>Schemas Declared to Gemini</h3>
+                            <p class="section-sub">This is exactly how Python functions are declared as JSON schemas so the LLM understands they exist.</p>
+                            <pre class="inspector-box" id="inspector-schemas">Loading...</pre>
+                        </div>
+                        
+                        <!-- Tab 2: Raw Request / Response JSON -->
+                        <div id="json-view" class="tab-pane">
+                            <h3>Last API Request Payload</h3>
+                            <p class="section-sub">The prompt list and dynamic function declarations sent to the Google endpoint.</p>
+                            <pre class="inspector-box" id="inspector-request">No request sent yet.</pre>
+                            
+                            <h3>Last API Response Payload</h3>
+                            <p class="section-sub">The structure returned by Gemini, containing candidate outputs and tool calls.</p>
+                            <pre class="inspector-box" id="inspector-response">No response received yet.</pre>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel-section education-section">
+                <div class="panel-header">
+                    <h2>How It Works Under the Hood</h2>
+                </div>
+                <div id="edu-card" class="edu-card">
+                    <h3 id="edu-title">The Agent Loop</h3>
+                    <p id="edu-content">An AI agent works by running a continuous loop. Instead of answering immediately, it reads the system prompt and available tools. It outputs a <strong>Thought</strong> (explaining its plan) followed by a <strong>Tool Call</strong> (a JSON request to execute a specific function). The python backend runs the function, appends the result, and feeds it back to the LLM to continue planning until a final answer is achieved.</p>
+                    <div class="edu-tip">
+                        <strong>Try this:</strong> Run the "Weather + Calculation" query and watch the flowchart glow move between the Planner and Skill Executor.
+                    </div>
+                </div>
+            </section>
+        </aside>
+    </main>
+    <footer class="app-footer">
+        <p>Built with pure Python (FastAPI) & Vanilla Javascript. No heavy frameworks (LangChain/CrewAI) used, illustrating the core logic of Agent-Tool loops.</p>
+    </footer>
+
+    <!-- App Script -->
+    <script src="app.js"></script>
+</body>
+</html>
