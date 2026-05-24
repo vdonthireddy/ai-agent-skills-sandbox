@@ -20,7 +20,7 @@
         <div class="header-status">
             <div class="status-pill">
                 <span class="status-dot green"></span>
-                <span id="active-skills-count">Loading Skills...</span>
+                <span id="active-skills-count">Loading Tools & Skills...</span>
             </div>
             <div class="mode-selector">
                 <label for="mode-toggle">Mode:</label>
@@ -36,38 +36,67 @@
     </header>
 
     <main class="app-layout">
-        <!-- LEFT COLUMN: Skills Manager -->
-        <aside class="panel left-panel" aria-label="Skills Management">
+        <!-- LEFT COLUMN: Tools & Skills Manager -->
+        <aside class="panel left-panel" aria-label="Tools and Skills Management">
             <section class="panel-section">
                 <div class="panel-header">
-                    <h2>Registered Python Skills</h2>
+                    <h2>Registry Capabilities</h2>
                     <span class="badge">WebMCP Standard</span>
                 </div>
-                <p class="panel-desc">These functions are decorated with <code>@skill</code> on the backend. Their parameters and descriptions are auto-extracted into JSON Schema for the LLM.</p>
-                <div id="skills-list" class="skills-list">
-                    <!-- Loaded dynamically -->
-                    <div class="loading-spinner">Loading skills from Python registry...</div>
+                <p class="panel-desc">Browse low-level <strong>Tools</strong> (atomic functions) and high-level <strong>Skills</strong> (composite workflows) registered in the Python backend.</p>
+                
+                <div class="tab-headers" style="margin-bottom: 12px; display: flex; gap: 8px;">
+                    <button class="tab-btn active" id="tab-btn-tools" data-sidebar-tab="tools-tab" style="padding: 6px 10px; font-size: 0.8rem; flex-grow: 1;">Tools (Atomic)</button>
+                    <button class="tab-btn" id="tab-btn-skills" data-sidebar-tab="skills-tab" style="padding: 6px 10px; font-size: 0.8rem; flex-grow: 1;">Skills (Workflows)</button>
+                </div>
+                
+                <div class="sidebar-tab-contents">
+                    <!-- Tools Tab Pane -->
+                    <div id="tools-tab" class="sidebar-tab-pane">
+                        <div id="tools-list" class="skills-list" style="max-height: 200px;">
+                            <div class="loading-spinner">Loading tools...</div>
+                        </div>
+                    </div>
+                    <!-- Skills Tab Pane -->
+                    <div id="skills-tab" class="sidebar-tab-pane" style="display: none;">
+                        <div id="skills-list" class="skills-list" style="max-height: 200px;">
+                            <div class="loading-spinner">Loading skills...</div>
+                        </div>
+                    </div>
                 </div>
             </section>
 
             <section class="panel-section flex-grow">
                 <div class="panel-header">
-                    <h2>Register Custom Python Skill</h2>
+                    <h2>Register Custom Capabilities</h2>
+                    <span class="badge" id="compile-type-badge">@skill</span>
                 </div>
                 <div class="code-editor-container">
                     <div class="editor-header">
-                        <span>python_skill.py</span>
+                        <span id="editor-filename">custom_skill.py</span>
                         <button id="btn-register-skill" class="btn btn-secondary btn-sm">Register Code</button>
                     </div>
-                    <textarea id="custom-skill-code" class="code-editor" spellcheck="false">@skill
-def reverse_string(text: str) -> str:
+                    <textarea id="custom-skill-code" class="code-editor" spellcheck="false" style="font-size: 0.78rem;">@skill
+def run_math_report(expr1: str, expr2: str) -> str:
     """
-    Reverses the characters in the input text string.
+    Evaluates two math expressions, compares them, and saves the comparison in storage.
     
     Args:
-        text: The string message to reverse.
+        expr1: The first math expression.
+        expr2: The second math expression.
     """
-    return text[::-1]
+    # 1. Call low-level calculator tool
+    res1 = calculator(expr1)
+    res2 = calculator(expr2)
+    
+    # 2. Compare and draft a report
+    comparison = f"Expression '{expr1}' = {res1}. Expression '{expr2}' = {res2}. "
+    comparison += f"First is {'larger' if res1 > res2 else 'smaller or equal'}."
+    
+    # 3. Call low-level browser_storage tool to save state
+    browser_storage("SET", "math_comparison", comparison)
+    
+    return comparison
 </textarea>
                 </div>
                 <div id="registration-status" class="alert-box" style="display: none;"></div>
@@ -155,9 +184,9 @@ def reverse_string(text: str) -> str:
             <!-- 3. Prompt & Templates Panel -->
             <div class="controls-container">
                 <div class="templates-bar">
-                    <button class="template-chip" data-prompt="What is the weather in Tokyo and what is that temperature squared?">Weather + Calculation</button>
-                    <button class="template-chip" data-prompt="Find the weather in Sydney, save it to browser storage under 'syd_report', and double check it is saved.">Weather + DB Storage</button>
-                    <button class="template-chip" data-prompt="Solve (25 * 4) / (5 + 15) and print the result.">Math Equation</button>
+                    <button class="template-chip" data-prompt="What is the weather in Tokyo and what is that temperature squared?">Tools: Weather + Math</button>
+                    <button class="template-chip" data-prompt="Find the weather in Sydney, save it to browser storage under 'syd_report', and double check it is saved.">Tools: Weather + DB</button>
+                    <button class="template-chip" data-prompt="Run a full travel research report on Paris and outline the details.">Skill: Travel Workflow</button>
                 </div>
                 
                 <div class="chat-input-row">

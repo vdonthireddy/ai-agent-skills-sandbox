@@ -3,13 +3,16 @@ import time
 import requests
 import re
 from typing import Generator, Dict, Any, List
-from skills import registry
 
-SYSTEM_PROMPT = """You are a helpful AI Agent equipped with local Python skills (tools). 
+from tools import tool_registry
+from skills import skill_registry
+
+SYSTEM_PROMPT = """You are a helpful AI Agent equipped with local Python tools and composite skills. 
 You must solve the user's request step-by-step.
-Before calling any tool, explain your reasoning in a clear "Thought:" block.
-Always use the tools available to gather information or perform calculations. Do not guess values that can be queried.
-Format your thought and tool calls clearly.
+Before calling any tool or skill, explain your reasoning in a clear "Thought:" block.
+Prefer using a high-level composite skill if it matches the request, as it coordinates multiple tools automatically.
+Always use the tools/skills available to gather information. Do not guess values.
+Format your thought and function calls clearly.
 """
 
 def extract_city(text: str) -> str:
@@ -19,33 +22,81 @@ def extract_city(text: str) -> str:
     for city in cities:
         if city in text_lower:
             return city.title()
-    # Simple regex fallback
-    match = re.search(r'in\s+([a-zA-Z\s]+?)(?:\s+and|\s+is|\s+to|\s*\.|\s*$)', text, re.IGNORECASE)
+    match = re.search(r'in\s+([a-zA-Z\s]+?)(?:\s+and|\s+is|\s+to|\s+report|\s*\.|\s*$)', text, re.IGNORECASE)
     if match:
         return match.group(1).strip().title()
-    return "Tokyo"
+    return "Paris"
 
 def run_agent_simulated(prompt: str) -> Generator[Dict[str, Any], None, None]:
     """
     Simulates the agent loop dynamically using heuristics.
-    Executes actual Python skills under the hood to show real outcomes.
+    Executes actual Python tools/skills under the hood.
     """
     yield {
         "step": 1,
         "type": "thought",
-        "content": f"Initializing simulated agent. User prompt: '{prompt}'. Scanning available skills..."
+        "content": f"Initializing simulated agent. Prompt: '{prompt}'. Scanning Tool & Skill Registries..."
     }
     time.sleep(1.0)
     
     prompt_lower = prompt.lower()
     
-    # Scenario A: Weather + Calculation
-    if "weather" in prompt_lower and ("square" in prompt_lower or "calculate" in prompt_lower or "math" in prompt_lower or "multiply" in prompt_lower or "*" in prompt_lower):
+    # New Scenario: Travel Research Report (Exposes the high-level Skill workflow)
+    if "report" in prompt_lower and ("city" in prompt_lower or "travel" in prompt_lower or any(c in prompt_lower for c in ["tokyo", "london", "san francisco", "new york", "paris", "sydney"])):
         city = extract_city(prompt)
         yield {
             "step": 2,
             "type": "thought",
-            "content": f"The user wants the weather in {city} and a calculation on the temperature. I will first query the weather using the 'get_weather' tool."
+            "content": f"The user wants a full travel research report on {city}. Instead of calling get_weather, calculator, and browser_storage manually one-by-one, I will call the high-level composite skill 'research_city' which automates this entire workflow in one step."
+        }
+        time.sleep(1.2)
+        
+        yield {
+            "step": 3,
+            "type": "tool_call",
+            "name": "research_city",
+            "args": {"city": city}
+        }
+        time.sleep(1.0)
+        
+        try:
+            # Execute the composite skill
+            skill_res = skill_registry.skills["research_city"]["func"](city=city)
+            yield {
+                "step": 4,
+                "type": "tool_execute",
+                "name": "research_city",
+                "output": skill_res
+            }
+            time.sleep(1.2)
+            
+            yield {
+                "step": 5,
+                "type": "thought",
+                "content": f"The 'research_city' skill completed successfully. It gathered the weather, converted temp, compiled the outline, and saved it under '{city.lower()}_travel_report'. I will output the final summary."
+            }
+            time.sleep(1.0)
+            
+            yield {
+                "step": 6,
+                "type": "final_answer",
+                "content": f"I executed the composite skill 'research_city' for {city}. The skill automatically executed the low-level weather, calculator, and database storage tools on the backend. The report is saved. (Executed composite python skill in Simulation Mode)"
+            }
+            
+        except Exception as e:
+            yield {
+                "step": 4,
+                "type": "error",
+                "content": f"Error running composite skill research_city: {str(e)}"
+            }
+            
+    # Scenario A: Weather + Calculation (sequential tools)
+    elif "weather" in prompt_lower and ("square" in prompt_lower or "calculate" in prompt_lower or "math" in prompt_lower or "multiply" in prompt_lower or "*" in prompt_lower):
+        city = extract_city(prompt)
+        yield {
+            "step": 2,
+            "type": "thought",
+            "content": f"The user wants the weather in {city} and a calculation. I will call the 'get_weather' tool."
         }
         time.sleep(1.2)
         
@@ -57,10 +108,8 @@ def run_agent_simulated(prompt: str) -> Generator[Dict[str, Any], None, None]:
         }
         time.sleep(1.0)
         
-        # Execute tool
         try:
-            weather_res = registry.skills["get_weather"]["func"](city=city)
-            # Extract temperature number from: "Weather in Tokyo: 18°C, Rainy..."
+            weather_res = tool_registry.tools["get_weather"]["func"](city=city)
             temp_match = re.search(r'(\d+)°C', weather_res)
             temp = float(temp_match.group(1)) if temp_match else 15.0
             
@@ -88,7 +137,7 @@ def run_agent_simulated(prompt: str) -> Generator[Dict[str, Any], None, None]:
             }
             time.sleep(1.0)
             
-            calc_res = registry.skills["calculator"]["func"](expression=expression)
+            calc_res = tool_registry.tools["calculator"]["func"](expression=expression)
             yield {
                 "step": 7,
                 "type": "tool_execute",
@@ -100,30 +149,30 @@ def run_agent_simulated(prompt: str) -> Generator[Dict[str, Any], None, None]:
             yield {
                 "step": 8,
                 "type": "thought",
-                "content": f"I have successfully queried the weather ({weather_res}) and calculated the squared temperature ({calc_res}). I will now formulate the final response."
+                "content": "Calculations complete. Ready for final output."
             }
             time.sleep(1.0)
             
             yield {
                 "step": 9,
                 "type": "final_answer",
-                "content": f"The weather in {city} is currently {temp}°C. Squaring this temperature value gives {calc_res}. (Executed live Python skills in Simulated Mode)"
+                "content": f"The weather in {city} is currently {temp}°C. Squaring this temperature value gives {calc_res}."
             }
             
         except Exception as e:
             yield {
                 "step": 4,
                 "type": "error",
-                "content": f"Error running simulator pipeline: {str(e)}"
+                "content": f"Error running weather calculation pipeline: {str(e)}"
             }
             
-    # Scenario B: Weather + Database Storage
+    # Scenario B: Weather + Database Storage (sequential tools)
     elif "weather" in prompt_lower and ("store" in prompt_lower or "save" in prompt_lower or "storage" in prompt_lower or "db" in prompt_lower):
         city = extract_city(prompt)
         yield {
             "step": 2,
             "type": "thought",
-            "content": f"The request requires fetching the weather in {city} and saving it. Let's first retrieve the weather."
+            "content": f"The request requires fetching the weather in {city} and saving it. Let's retrieve the weather first."
         }
         time.sleep(1.2)
         
@@ -136,7 +185,7 @@ def run_agent_simulated(prompt: str) -> Generator[Dict[str, Any], None, None]:
         time.sleep(1.0)
         
         try:
-            weather_res = registry.skills["get_weather"]["func"](city=city)
+            weather_res = tool_registry.tools["get_weather"]["func"](city=city)
             yield {
                 "step": 4,
                 "type": "tool_execute",
@@ -149,7 +198,7 @@ def run_agent_simulated(prompt: str) -> Generator[Dict[str, Any], None, None]:
             yield {
                 "step": 5,
                 "type": "thought",
-                "content": f"Weather reports: '{weather_res}'. I need to save this to the storage tool under the key '{storage_key}'."
+                "content": f"Weather reports: '{weather_res}'. I need to save this using the 'browser_storage' tool."
             }
             time.sleep(1.2)
             
@@ -161,7 +210,7 @@ def run_agent_simulated(prompt: str) -> Generator[Dict[str, Any], None, None]:
             }
             time.sleep(1.0)
             
-            store_res = registry.skills["browser_storage"]["func"](action="SET", key=storage_key, value=weather_res)
+            store_res = tool_registry.tools["browser_storage"]["func"](action="SET", key=storage_key, value=weather_res)
             yield {
                 "step": 7,
                 "type": "tool_execute",
@@ -180,7 +229,7 @@ def run_agent_simulated(prompt: str) -> Generator[Dict[str, Any], None, None]:
             yield {
                 "step": 9,
                 "type": "final_answer",
-                "content": f"I queried the weather in {city} ('{weather_res}') and saved it to browser storage under key '{storage_key}'. You can read it back using browser_storage GET."
+                "content": f"I queried the weather in {city} ('{weather_res}') and saved it to browser storage under key '{storage_key}'."
             }
         except Exception as e:
             yield {
@@ -189,12 +238,10 @@ def run_agent_simulated(prompt: str) -> Generator[Dict[str, Any], None, None]:
                 "content": f"Error running storage simulation: {str(e)}"
             }
 
-    # Scenario C: Basic Math
+    # Scenario C: Basic Math (uses calculator tool)
     elif any(op in prompt_lower for op in ["+", "-", "*", "/", "divided", "times", "minus", "plus", "squared", "eval"]):
-        # Find math-like expression
         match = re.search(r'([0-9+\-*/().\s]{3,})', prompt)
         expr = match.group(1).strip() if match else "2 + 2"
-        # strip punctuation at end
         expr = expr.rstrip('.?!')
         
         yield {
@@ -213,7 +260,7 @@ def run_agent_simulated(prompt: str) -> Generator[Dict[str, Any], None, None]:
         time.sleep(1.0)
         
         try:
-            res = registry.skills["calculator"]["func"](expression=expr)
+            res = tool_registry.tools["calculator"]["func"](expression=expr)
             yield {
                 "step": 4,
                 "type": "tool_execute",
@@ -232,7 +279,7 @@ def run_agent_simulated(prompt: str) -> Generator[Dict[str, Any], None, None]:
             yield {
                 "step": 6,
                 "type": "final_answer",
-                "content": f"Evaluating '{expr}' yields: {res}. (Simulated execution)"
+                "content": f"Evaluating '{expr}' yields: {res}."
             }
         except Exception as e:
             yield {
@@ -241,50 +288,56 @@ def run_agent_simulated(prompt: str) -> Generator[Dict[str, Any], None, None]:
                 "content": f"Calculation failed: {str(e)}"
             }
             
-    # Default Scenario: Custom prompt / Direct answer
+    # Default Scenario
     else:
         yield {
             "step": 2,
             "type": "thought",
-            "content": "No local tools match this query. I will provide a direct simulated response."
+            "content": "No local tools or skills match this query. Providing a direct simulated response."
         }
         time.sleep(1.5)
         
         yield {
             "step": 3,
             "type": "final_answer",
-            "content": f"This is a simulated agent response to: '{prompt}'. To run arbitrary prompts, write custom python skills, or do multi-step tool reasoning, enter your Gemini API Key in the settings panel to enable Live Mode!"
+            "content": f"This is a simulated agent response to: '{prompt}'. Enter a Gemini API Key to enable Live Mode and execute custom skills dynamically!"
         }
 
 def run_agent_live(prompt: str, api_key: str) -> Generator[Dict[str, Any], None, None]:
     """
-    Runs the agent loop live against the Gemini API using function calling.
-    Streams execution details step-by-step.
+    Runs the agent loop live against the Gemini API.
+    Combines both the Tool Registry and the Skill Registry, exposing all to the LLM.
     """
     model_name = "gemini-2.5-flash"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
     
-    # 1. Convert registered Python skills to Gemini API schema format
+    # Combine declarations from both registries
     function_declarations = []
-    for skill_name, skill_info in registry.skills.items():
-        # Gemini expects properties and types in a specific JSON schema format.
-        # We need to map standard JSON Schema to Gemini's schema requirements.
-        decl = {
-            "name": skill_info["schema"]["name"],
-            "description": skill_info["schema"]["description"],
+    
+    # 1. Add low-level tools
+    for name, tool_info in tool_registry.tools.items():
+        function_declarations.append({
+            "name": name,
+            "description": f"[Atomic Tool] {tool_info['schema']['description']}",
+            "parameters": tool_info["schema"]["parameters"]
+        })
+        
+    # 2. Add high-level composite skills
+    for name, skill_info in skill_registry.skills.items():
+        function_declarations.append({
+            "name": name,
+            "description": f"[Composite Skill Workflow] {skill_info['schema']['description']}",
             "parameters": skill_info["schema"]["parameters"]
-        }
-        function_declarations.append(decl)
+        })
         
     tools_payload = [{"functionDeclarations": function_declarations}] if function_declarations else []
     
     yield {
         "step": 1,
         "type": "thought",
-        "content": f"Initializing Live Gemini Agent. Tools registered: {', '.join(registry.skills.keys())}."
+        "content": f"Initializing Live Gemini Agent. Loaded {len(tool_registry.tools)} tools and {len(skill_registry.skills)} composite skills."
     }
     
-    # Initialize history
     history = [
         {"role": "user", "parts": [{"text": prompt}]}
     ]
@@ -294,7 +347,6 @@ def run_agent_live(prompt: str, api_key: str) -> Generator[Dict[str, Any], None,
     step_counter = 2
     
     for iteration in range(max_steps):
-        # Build prompt payload
         payload = {
             "contents": history,
             "systemInstruction": {
@@ -332,16 +384,13 @@ def run_agent_live(prompt: str, api_key: str) -> Generator[Dict[str, Any], None,
             content = candidate.get("content", {})
             parts = content.get("parts", [])
             
-            # Save response to history
             history.append({
                 "role": "model",
                 "parts": parts
             })
             
-            # Check for text (thoughts or answers)
             text_part = next((p.get("text") for p in parts if "text" in p), None)
             if text_part:
-                # If there's a tool call, we treat text as "thought", else it's the final answer
                 has_tool_call = any("functionCall" in p for p in parts)
                 yield {
                     "step": step_counter,
@@ -351,10 +400,8 @@ def run_agent_live(prompt: str, api_key: str) -> Generator[Dict[str, Any], None,
                 step_counter += 1
                 
                 if not has_tool_call:
-                    # No tool call, we are done!
                     break
                     
-            # Check for function calls
             function_call_part = next((p.get("functionCall") for p in parts if "functionCall" in p), None)
             if function_call_part:
                 func_name = function_call_part.get("name")
@@ -368,16 +415,23 @@ def run_agent_live(prompt: str, api_key: str) -> Generator[Dict[str, Any], None,
                 }
                 step_counter += 1
                 
-                # Execute the skill
-                if func_name not in registry.skills:
-                    output_msg = f"Error: Tool '{func_name}' is not registered."
-                else:
+                # Dynamic Routing: Search in Tool Registry first, then Skill Registry
+                if func_name in tool_registry.tools:
                     try:
-                        func = registry.skills[func_name]["func"]
+                        func = tool_registry.tools[func_name]["func"]
                         output = func(**func_args)
                         output_msg = str(output)
                     except Exception as e:
                         output_msg = f"Error executing tool '{func_name}': {str(e)}"
+                elif func_name in skill_registry.skills:
+                    try:
+                        func = skill_registry.skills[func_name]["func"]
+                        output = func(**func_args)
+                        output_msg = str(output)
+                    except Exception as e:
+                        output_msg = f"Error executing skill '{func_name}': {str(e)}"
+                else:
+                    output_msg = f"Error: Tool/Skill '{func_name}' is not registered."
                         
                 yield {
                     "step": step_counter,
@@ -387,9 +441,6 @@ def run_agent_live(prompt: str, api_key: str) -> Generator[Dict[str, Any], None,
                 }
                 step_counter += 1
                 
-                # Append function response to history
-                # Standard format for Gemini tool response role is "tool"
-                # Response must be a JSON object inside functionResponse.response
                 history.append({
                     "role": "tool",
                     "parts": [
@@ -404,7 +455,6 @@ def run_agent_live(prompt: str, api_key: str) -> Generator[Dict[str, Any], None,
                     ]
                 })
             else:
-                # If there's neither text nor function call (unlikely), stop
                 if not text_part:
                     yield {
                         "step": step_counter,

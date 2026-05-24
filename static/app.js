@@ -2,19 +2,56 @@
 // Application State & Constants
 // ==========================================================================
 const API_BASE = window.location.origin;
+let activeTools = {};
 let activeSkills = {};
+let activeRegisterType = "skill"; // "tool" or "skill"
 let currentRunning = false;
+
+// Templates for the editor
+const TOOL_TEMPLATE = `@tool
+def double_number(n: int) -> int:
+    """
+    Doubles the given integer input value.
+    
+    Args:
+        n: The base integer to multiply.
+    """
+    return n * 2
+`;
+
+const SKILL_TEMPLATE = `@skill
+def run_math_report(expr1: str, expr2: str) -> str:
+    """
+    Evaluates two math expressions, compares them, and saves the comparison in storage.
+    
+    Args:
+        expr1: The first math expression.
+        expr2: The second math expression.
+    """
+    # 1. Call low-level calculator tool
+    res1 = calculator(expr1)
+    res2 = calculator(expr2)
+    
+    # 2. Compare and draft a report
+    comparison = f"Expression '{expr1}' = {res1}. Expression '{expr2}' = {res2}. "
+    comparison += f"First is {'larger' if res1 > res2 else 'smaller or equal'}."
+    
+    # 3. Call low-level browser_storage tool to save state
+    browser_storage("SET", "math_comparison", comparison)
+    
+    return comparison
+`;
 
 // Educational Guide Messages per Step Type
 const EDUCATIONAL_GUIDE = {
     start: {
         title: "Agent Initialized",
-        content: "The agent engine is spinning up! It compiles your registered skills, converts their Python definitions into JSON Schemas, and loads the system prompts into memory.",
+        content: "The agent engine is spinning up! It compiles your registered tools and skills, converts their Python definitions into JSON Schemas, and loads the system prompts into memory.",
         tip: "Watch the connection from 'User Query' to 'LLM Planner' start pulsing."
     },
     thought: {
         title: "LLM Planning Phase",
-        content: "The LLM is now analyzing the chat history, system instruction, and tool schemas. It reasons about what step it needs to take next to answer your query. It does not guess data if a tool is available.",
+        content: "The LLM is now analyzing the chat history, system instruction, and schemas. It reasons about what step it needs to take next. If a high-level composite Skill exists (e.g. 'research_city'), it will choose to call it rather than executing multiple low-level tools.",
         tip: "Notice the 'LLM Planner' node is glowing. This represents the model deciding what to do."
     },
     tool_call: {
@@ -23,13 +60,13 @@ const EDUCATIONAL_GUIDE = {
         tip: "See the pulse moving from the 'LLM Planner' to the 'Skill Executor'."
     },
     tool_execute: {
-        title: "Local Execution (Skill Execution)",
-        content: "Your local Python backend intercepted the model's request. It located the decorator-registered function in memory, ran the actual Python code with the model's arguments, and grabbed the result.",
+        title: "Local Execution (Skill/Tool Run)",
+        content: "Your local Python backend intercepted the model's request. It located the decorator-registered function (either a Tool or a Skill workflow) in memory and executed it. If it is a Skill, it coordinates other Tools internally inside Python.",
         tip: "The 'Skill Executor' is highlighted. This represents raw Python code running on your system."
     },
     observation: {
         title: "Feeding Back Context",
-        content: "The result of your Python skill is formatted as a special 'tool/function' response message. This is added to the conversational context and sent back to the LLM. The model reads this result to decide its next step.",
+        content: "The result of your Python skill/tool is formatted as a special 'tool/function' response message. This is added to the conversational context and sent back to the LLM. The model reads this result to decide its next step.",
         tip: "Watch the loop pulse travel from the 'Skill Executor' back to the 'LLM Planner'."
     },
     final_answer: {
@@ -50,7 +87,6 @@ const EDUCATIONAL_GUIDE = {
 const modeToggle = document.getElementById("mode-toggle");
 const apiKeyContainer = document.getElementById("api-key-container");
 const geminiApiKey = document.getElementById("gemini-api-key");
-const skillsList = document.getElementById("skills-list");
 const activeSkillsCount = document.getElementById("active-skills-count");
 const customSkillCode = document.getElementById("custom-skill-code");
 const btnRegisterSkill = document.getElementById("btn-register-skill");
@@ -82,23 +118,31 @@ const inspectorResponse = document.getElementById("inspector-response");
 const eduTitle = document.getElementById("edu-title");
 const eduContent = document.getElementById("edu-content");
 
-// Tab switching
+// Tab switching (Right panel)
 const tabButtons = document.querySelectorAll(".tab-btn");
 const tabPanes = document.querySelectorAll(".tab-pane");
+
+// Sidebar elements
+const tabBtnTools = document.getElementById("tab-btn-tools");
+const tabBtnSkills = document.getElementById("tab-btn-skills");
+const toolsTab = document.getElementById("tools-tab");
+const skillsTab = document.getElementById("skills-tab");
+const compileTypeBadge = document.getElementById("compile-type-badge");
+const editorFilename = document.getElementById("editor-filename");
 
 // ==========================================================================
 // Main Initialization
 // ==========================================================================
 document.addEventListener("DOMContentLoaded", () => {
-    loadSkills();
+    loadCapabilities();
     setupEventListeners();
     updateFlowchartState("idle");
     
     // Set default system prompt template display
-    inspectorSystemPrompt.textContent = `You are a helpful AI Agent equipped with local Python skills (tools). 
+    inspectorSystemPrompt.textContent = `You are a helpful AI Agent equipped with local Python tools and composite skills. 
 You must solve the user's request step-by-step.
-Before calling any tool, explain your reasoning in a clear "Thought:" block.
-Always use the tools available to gather information. Do not guess values.`;
+Before calling any tool or skill, explain your reasoning in a clear "Thought:" block.
+Prefer using a high-level composite skill if it matches the request.`;
 });
 
 // ==========================================================================
@@ -136,20 +180,24 @@ function setupEventListeners() {
         chip.addEventListener("click", () => {
             if (currentRunning) return;
             userPrompt.value = chip.getAttribute("data-prompt");
-            // Micro animation
             chip.style.transform = "scale(0.95)";
             setTimeout(() => chip.style.transform = "scale(1)", 100);
         });
     });
 
-    // Register Dynamic Skill
-    btnRegisterSkill.addEventListener("click", registerCustomSkill);
+    // Register Dynamic Skill/Tool
+    btnRegisterSkill.addEventListener("click", registerCustomCapability);
 
-    // Tab switching
+    // Sidebar tab switching
+    tabBtnTools.addEventListener("click", () => switchSidebarTab("tools"));
+    tabBtnSkills.addEventListener("click", () => switchSidebarTab("skills"));
+
+    // Right panel tab switching
     tabButtons.forEach(btn => {
         btn.addEventListener("click", () => {
             const tabId = btn.getAttribute("data-tab");
-            tabButtons.forEach(b => b.classList.remove("active"));
+            // Only toggle tab headers that are in the tab-headers row
+            btn.parentElement.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
             tabPanes.forEach(p => p.classList.remove("active"));
             
             btn.classList.add("active");
@@ -159,71 +207,134 @@ function setupEventListeners() {
 }
 
 // ==========================================================================
-// API Operations: Skills Management
+// Sidebar Tab Manager
 // ==========================================================================
-async function loadSkills() {
+function switchSidebarTab(type) {
+    activeRegisterType = type === "tools" ? "tool" : "skill";
+    
+    if (type === "tools") {
+        tabBtnTools.classList.add("active");
+        tabBtnSkills.classList.remove("active");
+        toolsTab.style.display = "block";
+        skillsTab.style.display = "none";
+        compileTypeBadge.textContent = "@tool";
+        editorFilename.textContent = "custom_tool.py";
+        customSkillCode.value = TOOL_TEMPLATE;
+    } else {
+        tabBtnTools.classList.remove("active");
+        tabBtnSkills.classList.add("active");
+        toolsTab.style.display = "none";
+        skillsTab.style.display = "block";
+        compileTypeBadge.textContent = "@skill";
+        editorFilename.textContent = "custom_skill.py";
+        customSkillCode.value = SKILL_TEMPLATE;
+    }
+    showRegistrationStatus("info", `Switched editor mode to register dynamic ${activeRegisterType}s.`);
+}
+
+// ==========================================================================
+// API Operations: Tools & Skills Fetch
+// ==========================================================================
+async function loadCapabilities() {
     try {
-        const response = await fetch(`${API_BASE}/api/tools`);
-        if (!response.ok) throw new Error("Failed to load skills list.");
+        // 1. Fetch low-level tools
+        const toolsResponse = await fetch(`${API_BASE}/api/tools`);
+        if (!toolsResponse.ok) throw new Error("Failed to load tools registry.");
+        const tools = await toolsResponse.json();
         
-        const skills = await response.json();
+        // 2. Fetch high-level skills
+        const skillsResponse = await fetch(`${API_BASE}/api/skills`);
+        if (!skillsResponse.ok) throw new Error("Failed to load skills registry.");
+        const skills = await skillsResponse.json();
+
+        activeTools = {};
         activeSkills = {};
+        
+        const toolsList = document.getElementById("tools-list");
+        const skillsList = document.getElementById("skills-list");
+        
+        toolsList.innerHTML = "";
         skillsList.innerHTML = "";
         
-        if (skills.length === 0) {
-            skillsList.innerHTML = `<div class="loading-spinner">No registered skills found.</div>`;
-            activeSkillsCount.textContent = "0 Skills Active";
-            return;
-        }
-
-        activeSkillsCount.textContent = `${skills.length} Python Skills Active`;
-        
-        // Save to cache and render
-        skills.forEach(skill => {
-            activeSkills[skill.name] = skill;
-            
+        // Render Tools
+        tools.forEach(t => {
+            activeTools[t.name] = t;
             const card = document.createElement("div");
             card.className = "skill-card";
             card.innerHTML = `
-                <h3>${skill.name}</h3>
-                <p>${skill.description}</p>
+                <h3>${t.name}</h3>
+                <p>${t.description}</p>
             `;
-            
             card.addEventListener("click", () => {
-                // Highlight active skill card
                 document.querySelectorAll(".skill-card").forEach(c => c.classList.remove("active"));
                 card.classList.add("active");
-                
-                // Show source code and schema details in the panels
-                customSkillCode.value = skill.source;
-                showRegistrationStatus("info", `Viewing registered skill: '${skill.name}'. You can modify and register it again.`);
+                customSkillCode.value = t.source;
+                compileTypeBadge.textContent = "@tool";
+                editorFilename.textContent = "tools.py";
+                activeRegisterType = "tool";
+                showRegistrationStatus("info", `Viewing tool: '${t.name}'. You can modify and register it again.`);
             });
-            
+            toolsList.appendChild(card);
+        });
+
+        // Render Skills
+        skills.forEach(s => {
+            activeSkills[s.name] = s;
+            const card = document.createElement("div");
+            card.className = "skill-card";
+            card.innerHTML = `
+                <h3>${s.name}</h3>
+                <p>${s.description}</p>
+            `;
+            card.addEventListener("click", () => {
+                document.querySelectorAll(".skill-card").forEach(c => c.classList.remove("active"));
+                card.classList.add("active");
+                customSkillCode.value = s.source;
+                compileTypeBadge.textContent = "@skill";
+                editorFilename.textContent = "skills.py";
+                activeRegisterType = "skill";
+                showRegistrationStatus("info", `Viewing composite skill: '${s.name}'. You can modify and register it again.`);
+            });
             skillsList.appendChild(card);
         });
 
-        // Update inspector schemas display
-        const schemasOnly = skills.map(s => {
-            return {
+        // Update total counter
+        activeSkillsCount.textContent = `${tools.length} Tools & ${skills.length} Skills Active`;
+        
+        // Update combined schema inspector list
+        const combinedSchemas = [];
+        tools.forEach(t => {
+            combinedSchemas.push({
+                name: t.name,
+                type: "Atomic Tool",
+                description: t.description,
+                parameters: t.parameters
+            });
+        });
+        skills.forEach(s => {
+            combinedSchemas.push({
                 name: s.name,
+                type: "Composite Skill",
                 description: s.description,
                 parameters: s.parameters
-            };
+            });
         });
-        inspectorSchemas.textContent = JSON.stringify(schemasOnly, null, 2);
+        inspectorSchemas.textContent = JSON.stringify(combinedSchemas, null, 2);
 
     } catch (error) {
-        skillsList.innerHTML = `<div class="alert-box error">Error loading skills: ${error.message}</div>`;
+        document.getElementById("tools-list").innerHTML = `<div class="alert-box error">Error: ${error.message}</div>`;
     }
 }
 
-async function registerCustomSkill() {
+async function registerCustomCapability() {
     const code = customSkillCode.value;
     btnRegisterSkill.disabled = true;
-    showRegistrationStatus("info", "Compiling python code on backend...");
+    showRegistrationStatus("info", `Compiling dynamic ${activeRegisterType} code on backend...`);
+    
+    const endpoint = activeRegisterType === "tool" ? "/api/tools" : "/api/skills";
     
     try {
-        const response = await fetch(`${API_BASE}/api/tools`, {
+        const response = await fetch(`${API_BASE}${endpoint}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ code })
@@ -235,12 +346,12 @@ async function registerCustomSkill() {
             throw new Error(result.detail || "Error compiling code.");
         }
         
-        showRegistrationStatus("success", "Success! Code compiled and registered in the active agent memory.");
-        writeToConsole("system", `Registered custom Python skill code successfully.`);
-        loadSkills(); // Refresh sidebar list
+        showRegistrationStatus("success", `Success! Dynamic ${activeRegisterType} compiled and registered.`);
+        writeToConsole("system", `Registered custom Python ${activeRegisterType} successfully.`);
+        loadCapabilities(); // Refresh sidebar lists
     } catch (error) {
         showRegistrationStatus("error", error.message);
-        writeToConsole("error", `Failed to register skill: ${error.message}`);
+        writeToConsole("error", `Failed to register ${activeRegisterType}: ${error.message}`);
     } finally {
         btnRegisterSkill.disabled = false;
     }
@@ -267,7 +378,6 @@ async function runAgentLoop() {
         return;
     }
 
-    // Set state
     currentRunning = true;
     btnRunAgent.disabled = true;
     btnRunAgent.querySelector(".spinner").style.display = "block";
@@ -310,7 +420,6 @@ async function runAgentLoop() {
             throw new Error(errorMessage);
         }
 
-        // Read chunked HTTP SSE streams
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
@@ -321,7 +430,7 @@ async function runAgentLoop() {
 
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split("\n\n");
-            buffer = lines.pop(); // Hold onto uncompleted line
+            buffer = lines.pop();
 
             for (const line of lines) {
                 if (line.trim().startsWith("data: ")) {
@@ -338,7 +447,6 @@ async function runAgentLoop() {
         writeToConsole("error", error.message);
         updateFlowchartState("error");
     } finally {
-        // Reset states
         currentRunning = false;
         btnRunAgent.disabled = false;
         btnRunAgent.querySelector(".spinner").style.display = "none";
@@ -362,7 +470,7 @@ function processAgentStep(step) {
             
         case "tool_call":
             const argsStr = JSON.stringify(step.args);
-            writeToConsole("tool_call", `Calling skill '${step.name}' with arguments: ${argsStr}`);
+            writeToConsole("tool_call", `Calling capability '${step.name}' with arguments: ${argsStr}`);
             updateFlowchartState("tool_call", step.name);
             updateEduCard("tool_call");
             break;
@@ -381,7 +489,6 @@ function processAgentStep(step) {
             
         case "api_request":
             inspectorRequest.textContent = content;
-            // Force focus on JSON Logs tab when requests happen
             document.querySelector("[data-tab='json-view']").click();
             updateEduCard("api_request");
             break;
@@ -403,22 +510,16 @@ function processAgentStep(step) {
 function writeToConsole(type, text) {
     const msg = document.createElement("div");
     msg.className = `agent-${type}`;
-    
-    // Replace newlines with breaks for final answer block readability
     if (type === "final_answer") {
         msg.innerHTML = text.replace(/\n/g, "<br>");
     } else {
         msg.textContent = text;
     }
-    
     consoleLogs.appendChild(msg);
-    // Smooth scroll console container
     consoleLogs.scrollTop = consoleLogs.scrollHeight;
 }
 
-// Visual State Flow manager for the SVG flowchart
 function updateFlowchartState(state, info = "") {
-    // Reset all paths and nodes
     const paths = [pathInputReason, pathReasonTool, pathToolReason, pathReasonOutput];
     const nodes = [nodeInput, nodeReasoner, nodeExecutor, nodeOutput];
     
@@ -445,14 +546,13 @@ function updateFlowchartState(state, info = "") {
         nodeExecutor.classList.add("executing");
         pathReasonTool.classList.add("active");
         
-        // Show active skill name
         nodeExecutor.querySelector(".node-sub").textContent = info;
-        flowStateLabel.textContent = `State: LLM calling skill '${info}'`;
+        flowStateLabel.textContent = `State: LLM invoking '${info}'`;
     }
     else if (state === "tool_execute") {
         nodeExecutor.classList.add("active");
         pathToolReason.classList.add("active");
-        flowStateLabel.textContent = "State: Local Python function executing";
+        flowStateLabel.textContent = "State: Local Python execution running";
     }
     else if (state === "final_answer") {
         nodeReasoner.classList.add("active");
@@ -465,12 +565,10 @@ function updateFlowchartState(state, info = "") {
     }
 }
 
-// Updates educational documentation dynamically to match current step context
 function updateEduCard(stepType) {
     const cardData = EDUCATIONAL_GUIDE[stepType];
     if (!cardData) return;
     
-    // Add micro fade-in animation
     eduTitle.style.opacity = 0;
     eduContent.style.opacity = 0;
     
