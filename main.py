@@ -34,7 +34,7 @@ class RunRequest(BaseModel):
 class SkillUpload(BaseModel):
     code: str
 
-@app.get("/api/skills")
+@app.get("/api/tools")
 async def get_skills():
     """Retrieve list of all registered skills, their schemas and source code."""
     skills_data = []
@@ -48,7 +48,7 @@ async def get_skills():
         })
     return skills_data
 
-@app.post("/api/skills")
+@app.post("/api/tools")
 async def add_skill(payload: SkillUpload):
     """
     Dynamically compiles and registers a new Python skill.

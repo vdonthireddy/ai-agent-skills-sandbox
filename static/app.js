@@ -163,7 +163,7 @@ function setupEventListeners() {
 // ==========================================================================
 async function loadSkills() {
     try {
-        const response = await fetch(`${API_BASE}/api/skills`);
+        const response = await fetch(`${API_BASE}/api/tools`);
         if (!response.ok) throw new Error("Failed to load skills list.");
         
         const skills = await response.json();
@@ -223,7 +223,7 @@ async function registerCustomSkill() {
     showRegistrationStatus("info", "Compiling python code on backend...");
     
     try {
-        const response = await fetch(`${API_BASE}/api/skills`, {
+        const response = await fetch(`${API_BASE}/api/tools`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ code })
