@@ -91,45 +91,46 @@ sequenceDiagram
     
     rect rgb(20, 25, 45)
         Note over Agent,MCP: 1. Tool Declaration Phase
-        Agent->>MCP: Query active skills & schemas
-        MCP-->>Agent: Return tool definitions (JSON Schemas)
+        Agent->>MCP: GET /api/skills
+        MCP-->>Agent: Returns JSON Schemas: get_weather(city), calculator(expression), browser_storage(...)
     end
     
     rect rgb(30, 20, 40)
         Note over Agent,LLM: 2. LLM Planning Phase (Turn 1)
-        Agent->>LLM: POST prompt + history + Tool Schemas
-        Note over LLM: LLM reasons:<br/>"I need to call get_weather(city='Tokyo')"
-        LLM-->>Agent: Return Tool Call payload (get_weather)
+        Agent->>LLM: POST /v1beta/models/gemini-2.5-flash:generateContent (Prompt + Tool Schemas)
+        Note over LLM: LLM Decides:<br/>Call get_weather(city="Tokyo")
+        LLM-->>Agent: JSON Response: functionCall { name: "get_weather", args: { city: "Tokyo" } }
     end
     
     rect rgb(20, 40, 30)
         Note over Agent,MCP: 3. Execution Phase (Turn 1)
-        Agent->>Agent: Extract arguments and locate function
-        Agent->>MCP: Execute get_weather(city="Tokyo")
-        MCP-->>Agent: Return string: "18°C, Rainy"
+        Agent->>Agent: Map "get_weather" -> skills.py:get_weather(city="Tokyo")
+        Agent->>MCP: Call local Python: get_weather(city="Tokyo")
+        MCP-->>Agent: Returns string: "Weather in Tokyo: 18°C, Rainy, Humidity: 85%."
     end
     
     rect rgb(30, 20, 40)
         Note over Agent,LLM: 4. LLM Planning Phase (Turn 2)
-        Agent->>LLM: POST updated history with Tool response
-        Note over LLM: LLM reasons:<br/>"Weather is 18°C. Now I calculate 18 * 18"
-        LLM-->>Agent: Return Tool Call payload (calculator)
+        Agent->>LLM: POST (Prompt + functionCall + functionResponse: "18°C, Rainy")
+        Note over LLM: LLM Decides:<br/>Call calculator(expression="18.0 * 18.0")
+        LLM-->>Agent: JSON Response: functionCall { name: "calculator", args: { expression: "18.0 * 18.0" } }
     end
     
     rect rgb(20, 40, 30)
         Note over Agent,MCP: 5. Execution Phase (Turn 2)
-        Agent->>MCP: Execute calculator(expression="18 * 18")
-        MCP-->>Agent: Return result: 324.0
+        Agent->>Agent: Map "calculator" -> skills.py:calculator(expression="18.0 * 18.0")
+        Agent->>MCP: Call local Python: calculator(expression="18.0 * 18.0")
+        MCP-->>Agent: Returns float: 324.0
     end
     
     rect rgb(30, 20, 40)
         Note over Agent,LLM: 6. Finalization Phase
-        Agent->>LLM: POST final history with all tool outcomes
-        Note over LLM: LLM reasons:<br/>"All information gathered. Writing final text."
-        LLM-->>Agent: Return text: "Tokyo is 18°C. Squared is 324."
+        Agent->>LLM: POST (Prompt + get_weather result + calculator result: 324.0)
+        Note over LLM: LLM Decides:<br/>All tools completed, synthesize final answer
+        LLM-->>Agent: JSON Response: text: "The weather in Tokyo is currently 18.0°C. Squaring it gives 324.0."
     end
     
-    Agent-->>User: Output Final text & update flowchart states
+    Agent-->>User: SSE Stream chunk: {"type": "final_answer", "content": "The weather..."}
 ```
 
 ---
