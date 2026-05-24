@@ -80,22 +80,32 @@ The following diagram shows where the components sit. Notice that **no agent fra
 ```mermaid
 flowchart TD
     subgraph ClientSystem ["Client System (Browser / Local Server)"]
-        User[User Interface] --- App[Agent Client Coordinator]
+        User["User Interface"]
+        App["Agent Client Coordinator"]
+        
+        User --- App
         
         subgraph LocalRegistry ["Local Registry"]
-            App --- Tools[Native Python Tools]
-            App --- Skills[Native Python Skills]
+            Tools["Native Python Tools"]
+            Skills["Native Python Skills"]
         end
         
         subgraph MCP ["Model Context Protocol"]
-            App --- MCPServer[MCP Server]
-            MCPServer --- MCPTools[MCP Tools]
+            MCPServer["MCP Server"]
+            MCPTools["MCP Tools"]
+            MCPServer --- MCPTools
         end
+        
+        App --- Tools
+        App --- Skills
+        App --- MCPServer
     end
     
     subgraph ExternalCloud ["External Cloud"]
-        App --- LLM[Google Gemini API]
+        LLM["Google Gemini API"]
     end
+    
+    App --- LLM
     
     style App fill:#6366f1,stroke:#4f46e5,color:#fff
     style LLM fill:#ec4899,stroke:#db2777,color:#fff
@@ -103,6 +113,10 @@ flowchart TD
     style Tools fill:#8b5cf6,stroke:#7c3aed,color:#fff
     style Skills fill:#f59e0b,stroke:#d97706,color:#fff
 ```
+
+> [!NOTE]
+> *If your markdown viewer does not natively support Mermaid diagrams, here is the pre-rendered preview:*
+> ![System Architecture Diagram](https://mermaid.ink/img/Zmxvd2NoYXJ0IFRECiAgICBzdWJncmFwaCBDbGllbnRTeXN0ZW0gWyJDbGllbnQgU3lzdGVtIChCcm93c2VyIC8gTG9jYWwgU2VydmVyKSJdCiAgICAgICAgVXNlclsiVXNlciBJbnRlcmZhY2UiXQogICAgICAgIEFwcFsiQWdlbnQgQ2xpZW50IENvb3JkaW5hdG9yIl0KICAgICAgICAKICAgICAgICBVc2VyIC0tLSBBcHAKICAgICAgICAKICAgICAgICBzdWJncmFwaCBMb2NhbFJlZ2lzdHJ5IFsiTG9jYWwgUmVnaXN0cnkiXQogICAgICAgICAgICBUb29sc1siTmF0aXZlIFB5dGhvbiBUb29scyJdCiAgICAgICAgICAgIFNraWxsc1siTmF0aXZlIFB5dGhvbiBTa2lsbHMiXQogICAgICAgIGVuZAogICAgICAgIAogICAgICAgIHN1YmdyYXBoIE1DUCBbIk1vZGVsIENvbnRleHQgUHJvdG9jb2wiXQogICAgICAgICAgICBNQ1BTZXJ2ZXJbIk1DUCBTZXJ2ZXIiXQogICAgICAgICAgICBNQ1BUb29sc1siTUNQIFRvb2xzIl0KICAgICAgICAgICAgTUNQU2VydmVyIC0tLSBNQ1BUb29scwogICAgICAgIGVuZAogICAgICAgIAogICAgICAgIEFwcCAtLS0gVG9vbHMKICAgICAgICBBcHAgLS0tIFNraWxscwogICAgICAgIEFwcCAtLS0gTUNQU2VydmVyCiAgICBlbmQKICAgIAogICAgc3ViZ3JhcGggRXh0ZXJuYWxDbG91ZCBbIkV4dGVybmFsIENsb3VkIl0KICAgICAgICBMTE1bIkdvb2dsZSBHZW1pbmkgQVBJIl0KICAgIGVuZAogICAgCiAgICBBcHAgLS0tIExMTQogICAgCiAgICBzdHlsZSBBcHAgZmlsbDojNjM2NmYxLHN0cm9rZTojNGY0NmU1LGNvbG9yOiNmZmYKICAgIHN0eWxlIExMTSBmaWxsOiNlYzQ4OTksc3Ryb2tlOiNkYjI3NzcsY29sb3I6I2ZmZgogICAgc3R5bGUgTUNQU2VydmVyIGZpbGw6IzEwYjk4MSxzdHJva2U6IzA1OTY2OSxjb2xvcjojZmZmCiAgICBzdHlsZSBUb29scyBmaWxsOiM4YjVjZjYsc3Ryb2tlOiM3YzNhZWQsY29sb3I6I2ZmZgogICAgc3R5bGUgU2tpbGxzIGZpbGw6I2Y1OWUwYixzdHJva2U6I2Q5NzcwNixjb2xvcjojZmZm)
 
 ---
 
@@ -123,41 +137,41 @@ sequenceDiagram
 
     User->>Agent: Submit Query: "Get Tokyo weather & square it"
     
-    rect rgb(20, 25, 45)
+    rect #14192d
         Note over Agent,Registry: 1. Tool Declaration Phase
         Agent->>Registry: GET /api/tools
         Registry-->>Agent: Returns JSON Schemas: get_weather(city), calculator(expression), browser_storage(...)
     end
     
-    rect rgb(30, 20, 40)
+    rect #1e1428
         Note over Agent,LLM: 2. LLM Planning Phase (Turn 1)
         Agent->>LLM: POST /v1beta/... (Prompt + Tool Schemas)
         Note over LLM: LLM Decides:<br/>Call get_weather(city="Tokyo")
         LLM-->>Agent: JSON Response: functionCall { name: "get_weather", args: { city: "Tokyo" } }
     end
     
-    rect rgb(20, 40, 30)
+    rect #14281e
         Note over Agent,Registry: 3. Execution Phase (Turn 1)
         Agent->>Agent: Map "get_weather" -> tools.py:get_weather(city="Tokyo")
         Agent->>Registry: Call local Python: get_weather(city="Tokyo")
         Registry-->>Agent: Returns string: "Weather in Tokyo: 18°C, Rainy..."
     end
     
-    rect rgb(30, 20, 40)
+    rect #1e1428
         Note over Agent,LLM: 4. LLM Planning Phase (Turn 2)
         Agent->>LLM: POST (Prompt + weather result)
         Note over LLM: LLM Decides:<br/>Call calculator(expression="18.0 * 18.0")
         LLM-->>Agent: JSON Response: functionCall { name: "calculator", args: { expression: "18.0 * 18.0" } }
     end
     
-    rect rgb(20, 40, 30)
+    rect #14281e
         Note over Agent,Registry: 5. Execution Phase (Turn 2)
         Agent->>Agent: Map "calculator" -> tools.py:calculator(expression="18.0 * 18.0")
         Agent->>Registry: Call local Python: calculator(expression="18.0 * 18.0")
         Registry-->>Agent: Returns float: 324.0
     end
     
-    rect rgb(30, 20, 40)
+    rect #1e1428
         Note over Agent,LLM: 6. Finalization Phase
         Agent->>LLM: POST (Prompt + weather result + calculator result: 324.0)
         Note over LLM: LLM Decides:<br/>All tools completed, synthesize final answer
@@ -167,36 +181,24 @@ sequenceDiagram
     Agent-->>User: SSE Stream chunk: {"type": "final_answer", "content": "The weather..."}
 ```
 
----
-
-### Flow B: High-level Composite Skills (Encapsulated execution)
-*For query: "Run a full travel research report on Paris"* (Saves LLM planning turns by executing the entire workflow locally in Python).
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User as Developer (Browser)
-    participant Agent as Agent Client (Python/JS)
-    participant SkillsReg as Skills Registry (skills.py)
-    participant ToolsReg as Tools Registry (tools.py)
-    participant LLM as Gemini API (LLM)
-
-    User->>Agent: Submit Query: "Run a full travel research report on Paris"
-    
-    rect rgb(20, 25, 45)
-        Note over Agent,SkillsReg: 1. Capability Declaration Phase
-        Agent->>SkillsReg: GET /api/tools & GET /api/skills
-        SkillsReg-->>Agent: Returns tool + skill schemas (including research_city)
+> [!NOTE]
+> *If your markdown viewer does not natively support Mermaid diagrams, here is the pre-rendered preview:*
+> ![Sequence Flow A Diagram](https://mermaid.ink/img/c2VxdWVuY2VEaWFncmFtCiAgICBhdXRvbnVtYmVyCiAgICBhY3RvciBVc2VyIGFzIERldmVsb3BlciAoQnJvd3NlcikKICAgIHBhcnRpY2lwYW50IEFnZW50IGFzIEFnZW50IENsaWVudCAoUHl0aG9uL0pTKQogICAgcGFydGljaXBhbnQgUmVnaXN0cnkgYXMgVG9vbHMgUmVnaXN0cnkgKHRvb2xzLnB5KQogICAgcGFydGljaXBhbnQgTExNIGFzIEdlbWluaSBBUEkgKExMTSkKCiAgICBVc2VyLT4+QWdlbnQ6IFN1Ym1pdCBRdWVyeTogIkdldCBUb2t5byB3ZWF0aGVyICYgc3F1YXJlIGl0IgogICAgCiAgICByZWN0ICMxNDE5MmQKICAgICAgICBOb3RlIG92ZXIgQWdlbnQsUmVnaXN0cnk6IDEuIFRvb2wgRGVjbGFyYXRpb24gUGhhc2UKICAgICAgICBBZ2VudC0+PlJlZ2lzdHJ5OiBHRVQgL2FwaS90b29scwogICAgICAgIFJlZ2lzdHJ5LS0+PkFnZW50OiBSZXR1cm5zIEpTT04gU2NoZW1hczogZ2V0X3dlYXRoZXIoY2l0eT0iVG9reW8iKSwgY2FsY3VsYXRvcihleHByZXNzaW9uPSIxOC4wICogMTguMCIpLCBicm93c2VyX3N0b3JhZ2UoLi4uKQogICAgZW5kCiAgICAKICAgIHJlY3QgIzFlMTQyOAogICAgICAgIE5vdGUgb3ZlciBBZ2VudCxMTE06IDIuIExMTSBQbGFubmluZyBQaGFzZSAoVHVybiAxKQogICAgICAgIEFnZW50LT4+TExNOiBQT1NUIC92MWJldGEvLi4uIChQcm9tcHQgKyBUb29sIFNjaGVtYXMpCiAgICAgICAgTm90ZSBvdmVyIExMTTogTExNIERlY2lkZXM6PGJyLz5DYWxsIGdldF_3ZWF0aGVyKGNpdHk9IlRva3lvIikKICAgICAgICBMTE0tLT4+QWdlbnQ6IEpTT04gUmVzcG9uc2U6IGZ1bmN0aW9uQ2FsbCB7IG5hbWU6ICJnZXRfd2VhdGhlciIsIGFyZ3M6IHsgY2l0eTogIlRva3lvIiB9IH0KICAgIGVuZAogICAgCiAgICByZWN0ICMxNDI4MWUKICAgICAgICBOb3RlIG92ZXIgQWdlbnQsUmVnaXN0cnk6IDMuIEV4ZWN1dGlvbiBQaGFzZSAoVHVybiAxKQogICAgICAgIEFnZW50LT4+QWdlbnQ6IE1hcCAiZ2V0X3dlYXRoZXIiIC0+IHRvb2xzLnB5OmdldF93ZWF0aGVyKGNpdHk9IlRva3lvIikKICAgICAgICBBZ2VudC0+PlJlZ2lzdHJ5OiBDYWxsIGxvY2FsIFB5dGhvbjogZ2V0X3dlYXRoZXIoY2l0eT0iVG9reW8iKQogICAgICAgIFJlZ2lzdHJ5LS0+PkFnZW50OiBSZXR1cm5zIHN0cmluZzogIldlYXRoZXIgaW4gVG9reW86IDE4wrFDLCBSYWlueS4uLiIKICAgIGVuZAogICAgCiAgICByZWN0ICMxZTE0yOAogICAgICAgIE5vdGUgb3ZlciBBZ2VudCxMTE06IDQuIExMTSBQbGFubmluZyBQaGFzZSAoVHVybiAyKQogICAgICAgIEFnZW50LT4+TExNOiBQT1NUIChQcm9tcHQgKyB3ZWF0aGVyIHJlc3VsdCkKICAgICAgICBOb3RlIG92ZXIgTExNOiBMTE0gRGVjaWRlczo8YnIvPkNhbGwgY2FsY3VsYXRvcihleHByZXNzaW9uPSIxOC4wICogMTguMCIpCiAgICAgICAgTExNLS0+PkFnZW50OiBKU09OIFJlc3BvbnNlOiBmdW5jdGlvbkNhbGwgeyBuYW1lOiAiY2FsY3VsYXRvciIsIGFyZ3M6IHsgZXhwcmVzc2lvbjogIjE4LjAgKiAxOC4wIiB9IH0KICAgIGVuZAogICAgCiAgICByZWN0ICMxNDI4MWUKICAgICAgICBOb3RlIG92ZXIgQWdlbnQsUmVnaXN0cnk6IDUuIEV4ZWN1dGlvbiBQaGFzZSAoVHVybiAyKQogICAgICAgIEFnZW50LT4+QWdlbnQ6IE1hcCAiY2FsY3VsYXRvciIgLT4gdG9vbHMucHk6Y2FsY3VsYXRvcihleHByZXNzaW9uPSIxOC4wICogMTguMCIpCiAgICAgICAgQWdlbnQtPj5SZWdpc3RyeTogQ2FsbCBsb2NhbCBQeXRob246IGNhbGN1bGF0b3IoZXhwcmVzc2lvbj0iMTguMCAqIDE4LjAiKQogICAgICAgIFJlZ2lzdHJ5LS0+PkFnZW50OiBSZXR1cm5zIGZsb2F0OiAzMjQuMAogICAgZW5kCiAgICAKICAgIHJlY3QgIzFlMTQyOAogICAgICAgIE5vdGUgb3ZlciBBZ2VudCxMTE06IDYuIEZpbmFsaXphdGlvbiBQaGFzZQogICAgICAgIEFnZW50LT4+TExNOiB    rect #14192d
+        Note over Agent,SkillsReg,ToolsReg: 1. Capability Declaration Phase
+        Agent->>ToolsReg: GET /api/tools
+        ToolsReg-->>Agent: Returns Tool schemas (get_weather, calculator, etc.)
+        Agent->>SkillsReg: GET /api/skills
+        SkillsReg-->>Agent: Returns Skill schemas (research_city)
     end
     
-    rect rgb(30, 20, 40)
+    rect #1e1428
         Note over Agent,LLM: 2. LLM Planning Phase (Turn 1)
         Agent->>LLM: POST /v1beta/... (Prompt + Tool/Skill Schemas)
         Note over LLM: LLM Decides:<br/>Call research_city(city="Paris")
         LLM-->>Agent: JSON Response: functionCall { name: "research_city", args: { city: "Paris" } }
     end
     
-    rect rgb(20, 40, 30)
+    rect #14281e
         Note over Agent,ToolsReg: 3. Local Workflow Execution Phase (1 Turn on LLM side!)
         Agent->>SkillsReg: Call local Python: research_city(city="Paris")
         Note over SkillsReg: research_city starts...
@@ -207,7 +209,7 @@ sequenceDiagram
         SkillsReg-->>Agent: Returns full multi-line report
     end
     
-    rect rgb(30, 20, 40)
+    rect #1e1428
         Note over Agent,LLM: 4. Finalization Phase
         Agent->>LLM: POST (Prompt + research_city response)
         Note over LLM: LLM Decides:<br/>Work completed, summarize report details
@@ -216,6 +218,10 @@ sequenceDiagram
     
     Agent-->>User: SSE Stream chunk: {"type": "final_answer", "content": "I have successfully..."}
 ```
+
+> [!NOTE]
+> *If your markdown viewer does not natively support Mermaid diagrams, here is the pre-rendered preview:*
+> ![Sequence Flow B Diagram](https://mermaid.ink/img/c2VxdWVuY2VEaWFncmFtCiAgICBhdXRvbnVtYmVyCiAgICBhY3RvciBVc2VyIGFzIERldmVsb3BlciAoQnJvd3NlcikKICAgIHBhcnRpY2lwYW50IEFnZW50IGFzIEFnZW50IENsaWVudCAoUHl0aG9uL0pTKQogICAgcGFydGljaXBhbnQgU2tpbGxzUmVnIGFzIFNraWxscyBSZWdpc3RyeSAoc2tpbGxzLnB5KQogICAgcGFydGljaXBhbnQgVG9vbHNSZWcgYXMgVG9vbHMgUmVnaXN0cnkgKHRvb2xzLnB5KQogICAgcGFydGljaXBhbnQgTExNIGFzIEdlbWluaSBBUEkgKExMTSkKCiAgICBVc2VyLT4+QWdlbnQ6IFN1Ym1pdCBRdWVyeTogIlJ1biBhIGZ1bGwgdHJhdmVsIHJlc2VhcmNoIHJlcG9ydCBvbiBQYXJpcyIKICAgIAogICAgcmVjdCAjMTQxOTJkCiAgICAgICAgTm90ZSBvdmVyIEFnZW50LFNraWxsc1JlZyxUb29sc1JlZzogMS4gQ2FwYWJpbGl0eSBEZWNsYXJhdGlvbiBQaGFzZQogICAgICAgIEFnZW50LT4+VG9vbHNSZWc6IEdFVCAvYXBpL3Rvb2xzCiAgICAgICAgVG9vbHNSZWctLT4+QWdlbnQ6IFJldHVybnMgVG9vbCBzY2hlbWFzIChnZXRfd2VhdGhlciwgY2FsY3VsYXRvciwgZXRjLikKICAgICAgICBBZ2VudC0+PlNraWxsc1JlZzogR0VUIC9hcGkvc2tpbGxzCiAgICAgICAgU2tpbGxzUmVnLS0+PkFnZW50OiBSZXR1cm5zIFNraWxsIHNjaGVtYXMgKHJlc2VhcmNoX2NpdHkpCiAgICBlbmQKICAgIAogICAgcmVjdCAjMWUxNDI4CiAgICAgICAgTm90ZSBvdmVyIEFnZW50LExMTTogMi4gTExNIFBsYW5uaW5nIFBoYXNlIChUdXJuIDEpCiAgICAgICAgQWdlbnQtPj5MTE06IFBPU1QgL3YxYmV0YS8uLi4gKFByb21wdCArIFRvb2wvU2tpbGwgU2NoZW1hcykKICAgICAgICBOb3RlIG92ZXIgTExNOiBMTE0gRGVjaWRlczo8YnIvPkNhbGwgcmVzZWFyY2hfY2l0eShjaXR5PSJQYXJpcyIpCiAgICAgICAgTExNLS0+PkFnZW50OiBKU09OIFJlc3BvbnNlOiBmdW5jdGlvbkNhbGwgeyBuYW1lOiAicmVzZWFyY2hfY2l0eSIsIGFyZ3M6IHsgY2l0eTogIlBhcmlzIiB9IH0KICAgIGVuZAogICAgCiAgICByZWN0ICMxNDI4MWUKICAgICAgICBOb3RlIG92ZXIgQWdlbnQsVG9vbHNSZWc6IDMuIExvY2FsIFdvcmtmbG93IEV4ZWN1dGlvbiBQaGFzZSAoMSBUdXJuIG9uIExMTSBzaWRlISkKICAgICAgICBBZ2VudC0+PlNraWxsc1JlZzogQ2FsbCBsb2NhbCBQeXRob246IHJlc2VhcmNoX2NpdHkoY2l0eT0iUGFyaXMiKQogICAgICAgIE5vdGUgb3ZlciBTa2lsbHNSZWc6IHJlc2VhcmNoX2NpdHkgc3RhcnRzLi4uCiAgICAgICAgU2tpbGxzUmVnLT4+VG9vbHNSZWc6IENhbGwgZ2V0X3dlYXRoZXIoY2l0eT0iUGFyaXMiKSAtPiAiMTbCsEMsIFdpbmR5IgogICAgICAgIFNraWxsc1JlZz0+PlRvb2xzUmVnOiBDYWxsIGNhbGN1bGF0b3IoIigxNiAqIDkvNSkgKyAzMiIpIC0+IDYwLjgKICAgICAgICBTa2lsbHNSZWctPj5Ub29sc1JlZzogQ2FsbCBmZXRjaF93ZWJwYWdlKCJodHRwczovL2VuLndpa2lwZWRpYS5vcmcvd2lraS9QYXJpcyIpIC0+IFdpa2kgdGV4dAogICAgICAgIFNraWxsc1JlZz0+PlRvb2xzUmVnOiBDYWxsIGJyb3dzZXJfc3RvcmFnZSgiU0VUIiwgInBhcmlzX3RyYXZlbF9yZXBvcnQiLCByZXBvcnQpIC0+IFN1Y2Nlc3MKICAgICAgICBTa2lsbHNSZWctLT4+QWdlbnQ6IFJldHVybnMgZnVsbCBtdWx0aS1saW5lIHJlcG9ydAogICAgZW5kCiAgICAKICAgIHJlY3QgIzFlMTQyOAogICAgICAgIE5vdGUgb3ZlciBBZ2VudCxMTE06IDQuIEZpbmFsaXphdGlvbiBQaGFzZQogICAgICAgIEFnZW50LT4+TExNOiBQT1NUIChQcm9tcHQgKyByZXNlYXJjaF9jaXR5IHJlc3BvbnNlKQogICAgICAgIE5vdGUgb3ZlciBMTE06IExMTSBEZWNpZGVzOjxici8+V29yayBjb21wbGV0ZWQsIHN1bW1hcml6ZSByZXBvcnQgZGV0YWlscwogICAgICAgIExMTS0tPj5BZ2VudDogSlNPTiBSZXNwb25zZTogdGV4dDogIkkgaGF2ZSBzdWNjZXNzZnVsbHkgcnVuIGFuZCBzYXZlZCB0aGUgdHJhdmVsIHJlcG9ydC4uLiIKICAgIGVuZAogICAgCiAgICBBZ2VudC0tPj5Vc2VyOiBTU0UgU3RyZWFtIGNodW5rOiB7InR5cGUiOiAiZmluYWxfYW5zd2VyIiwgImNvbnRlbnQiOiAiSSBoYXZlIHN1Y2Nlc3NmdWxseS4uLiJ9)iUGFyaXMiKSAtPiAiMTbCsEMsIFdpbmR5IgogICAgICAgIFNraWxsc1JlZz0+PlRvb2xzUmVnOiBDYWxsIGNhbGN1bGF0b3IoIigxNiAqIDkvNSkgKyAzMiIpIC0+IDYwLjgKICAgICAgICBTa2lsbHNSZWctPj5Ub29sc1JlZzogQ2FsbCBmZXRjaF93ZWJwYWdlKCJodHRwczovL2VuLndpa2lwZWRpYS5vcmcvd2lraS9QYXJpcyIpIC0+IFdpa2kgdGV4dAogICAgICAgIFNraWxsc1JlZz0+PlRvb2xzUmVnOiBDYWxsIGJyb3dzZXJfc3RvcmFnZSgiU0VUIiwgInBhcmlzX3RyYXZlbF9yZXBvcnQiLCByZXBvcnQpIC0+IFN1Y2Nlc3MKICAgICAgICBTa2lsbHNSZWctLT4+QWdlbnQ6IFJldHVybnMgZnVsbCBtdWx0aS1saW5lIHJlcG9ydAogICAgZW5kCiAgICAKICAgIHJlY3QgIzFlMTQyOAogICAgICAgIE5vdGUgb3ZlciBBZ2VudCxMTE06IDQuIEZpbmFsaXphdGlvbiBQaGFzZQogICAgICAgIEFnZW50LT4+TExNOiBQT1NUIChQcm9tcHQgKyB4ZXNlYXJjaF9jaXR5IHJlc3VsdCkKICAgICAgICBOb3RlIG92ZXIgTExNOiBMTE0gRGVjaWRlczo8YnIvPldvcmsgY29tcGxldGVkLCBzdW1tYXJpemUgcmVwb3J0IGRldGFpbHMKICAgICAgICBMTE0tLT4+QWdlbnQ6IEpTT04gUmVzcG9uc2U6IHRleHQ6ICJJIGhhdmUgc3VjY2Vzc2Z1bGx5IHJ1biBhbmQgc2F2ZWQgdGhlIHRyYXZlbCByZXBvcnQuLi4iCiAgICBlbmQKICAgIAogICAgQWdlbnQtLT4+VXNlcjogU1NFIFN0cmVhbSBjaHVuazogeyJ0eXBlIjogImZpbmFsbF9hbnN3ZXIiLCAiY29udGVudCI6ICJJIGhhdmUgc3VjY2Vzc2Z1bGx5Li4uIn0=
 
 ---
 
